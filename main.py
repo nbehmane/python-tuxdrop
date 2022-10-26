@@ -63,6 +63,10 @@ def main():
         pair.pair()
     if (args.advertise == True):
         advertise.advertise_start();
+        #session_bus = dbus.SessionBus()
+        #client = dbus.Interface(session_bus.get_object("org.bluez.obex", "/org/bluez/obex", ), 'org.bluez.obex.Client1')
+        #print("Creating session...")
+        #obex_session = client.CreateSession(path, {"Target": "ftp"})
 
 
 if __name__ == '__main__':

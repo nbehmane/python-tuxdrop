@@ -44,7 +44,6 @@ def parse_arguments():
                         )
 
     args_parsed = parser.parse_args()
-    parser.print_usage()
     return args_parsed
 
 

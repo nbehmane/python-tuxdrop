@@ -1,7 +1,5 @@
 import sys
 import signal
-from time import sleep
-
 sys.path.insert(0, './bluetooth')
 import bluetooth_constants
 import bluetooth_exceptions
@@ -9,35 +7,35 @@ import dbus
 import dbus.exceptions
 import dbus.service
 import dbus.mainloop.glib
-import pair
+import agent
 from gi.repository import GLib
 
-bus = None
-adapter_path = None
-adv_mgr_interface = None
 mainloop = GLib.MainLoop()
-dev_path = None
-session_bus = None
-client = None
-obex_session = None
+dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+bus = dbus.SystemBus()
+adapter_path = bluetooth_constants.BLUEZ_NAMESPACE + bluetooth_constants.ADAPTER_NAME
+adv_mgr_interface = dbus.Interface(bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, adapter_path),
+                                   bluetooth_constants.ADVERTISING_MANAGER_INTERFACE)
 
-global dev_obj
+dev_path = None
+dev_obj = None
+connected = 0
 
 
 class Advertisement(dbus.service.Object):
     PATH_BASE = '/org/bluez/pybex/advertisement'
 
-    def __init__(self, bus, index, advertising_type):
+    def __init__(self, process_bus, index, advertising_type):
         self.path = self.PATH_BASE + str(index)
-        self.bus = bus
+        self.bus = process_bus
         self.ad_type = advertising_type
         self.service_uuids = ['0x1106']
         self.manufacturer_data = None
         self.solicit_uuids = None
         self.service_data = None
         self.local_name = 'PyBex'
-        self.include_tx_power = False
-        self.include_tx_power = False
+        self.include_tx_power = True
+        self.include_tx_power = True
         self.data = None
         self.discoverable = True
         dbus.service.Object.__init__(self, bus, self.path)
@@ -59,7 +57,6 @@ class Advertisement(dbus.service.Object):
             properties['Includes'] = dbus.Array(['tx-power'], signature='s')
         if self.data is not None:
             properties['Data'] = dbus.Dictionary(self.data, signature='yv')
-        print(properties)
         return {bluetooth_constants.ADVERTISING_MANAGER_INTERFACE: properties}
 
     def get_path(self):
@@ -97,43 +94,34 @@ def advertise_start():
                             dbus_interface=bluetooth_constants.DBUS_OM_IFACE,
                             signal_name="InterfacesAdded")
 
-    print("Registering advertisement ", adv.get_path())
-    adv_mgr_interface.RegisterAdvertisement(adv.get_path(), {}, reply_handler=advertise_register_cb,
+    print(f"Registering advertisement {adv.get_path()}")
+    adv_mgr_interface.RegisterAdvertisement(adv.get_path(),
+                                            {},
+                                            reply_handler=advertise_register_cb,
                                             error_handler=advertise_register_error_cb)
+
     print(f"Advertisement {adv.local_name} activated.")
     print(f"Registering Agent")
-    obj = bus.get_object("org.bluez", "/org/bluez")
-    manager = dbus.Interface(obj, "org.bluez.AgentManager1")
-    agent_path = "/pybex/agent"
-    capability = "KeyboardDisplay"
-    agent = pair.Agent(bus, agent_path)
-    manager.RegisterAgent(agent_path, capability)
-    agent.set_exit_on_release(False)
-    print("Agent registered")
+    agent.agent_register(bus, mainloop, path="/pybex/agent")
     signal.signal(signal.SIGINT, ctrlc_handler)
     mainloop.run()
-
-
-def set_trusted(path):
-    props = dbus.Interface(bus.get_object("org.bluez", path), "org.freedesktop.DBus.Properties")
-    props.Set("org.bluez.Device1", "Trusted", True)
-
-
-def dev_connect(path):
-    dev = dbus.Interface(bus.get_object("org.bluez", path), "org.bluez.Device1")
-    dev.Connect()
 
 
 def advertise_set_connected_status(path, status):
     global connected
     global dev_path
     global dev_obj
-    if (status == 1):
+    if status == 1:
         print("-" * 40)
         print(f'{path} Connected')
         print("-" * 40)
         connected = 1
+        props = dbus.Interface(bus.get_object("org.bluez", path), "org.freedesktop.DBus.Properties")
+        status = props.Get("org.bluez.Device1", "Trusted")
         advertise_stop()
+        if status == 0:
+            return
+        mainloop.quit()
     else:
         print("Disconnected")
         connected = 0
@@ -141,28 +129,19 @@ def advertise_set_connected_status(path, status):
 
 
 def advertise_set_paired_status(path, paired):
-    global session_bus
-    global client
-    global obex_session
-    if (paired == 1):
+    if paired == 1:
         print(f"{path} is paired.")
-        session_bus = dbus.SessionBus()
-        client = dbus.Interface(session_bus.get_object("org.bluez.obex", "/org/bluez/obex", ), 'org.bluez.obex.Client1')
-        print("Creating session...")
-        obex_session = client.CreateSession(path, {"Target": "ftp"})
-
-        # Once paired, this is where the obex code will go.
-
+        mainloop.quit()
     else:
         print(f"{path} is not paired.")
 
 
 def advertise_properties_changed_signal(interface, changed, invalidated=None, path=None):
     try:
-        if (interface == bluetooth_constants.DEVICE_INTERFACE):
-            if ("Connected" in changed):
+        if interface == bluetooth_constants.DEVICE_INTERFACE:
+            if "Connected" in changed:
                 advertise_set_connected_status(path, changed["Connected"])
-            if ("Paired" in changed):
+            if "Paired" in changed:
                 advertise_set_paired_status(path, changed["Paired"])
     except Exception as e:
         print(e)
@@ -171,24 +150,22 @@ def advertise_properties_changed_signal(interface, changed, invalidated=None, pa
 def advertise_interfaces_added_signal(path, interfaces):
     if bluetooth_constants.DEVICE_INTERFACE in interfaces:
         properties = interfaces[bluetooth_constants.DEVICE_INTERFACE]
-        if ("Connected" in properties):
+        if "Connected" in properties:
             advertise_set_connected_status(path, properties["Connected"])
-        if ("Paired" in properties):
+        if "Paired" in properties:
             advertise_set_paired_status(path, properties["Paired"])
 
 
 def advertise_stop():
     global adv
     global adv_mgr_interface
-    print("Unregistering advertisement ", adv.get_path())
-    adv_mgr_interface.UnregisterAdvertisement(adv.get_path())
+    try:
+        adv_mgr_interface.UnregisterAdvertisement(adv.get_path())
+        print("Unregistering advertisement ", adv.get_path())
+    except Exception:
+        return
 
 
-dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
-bus = dbus.SystemBus()
-adapter_path = bluetooth_constants.BLUEZ_NAMESPACE + bluetooth_constants.ADAPTER_NAME
-adv_mgr_interface = dbus.Interface(bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, adapter_path),
-                                   bluetooth_constants.ADVERTISING_MANAGER_INTERFACE)
 adv = Advertisement(bus, 0, 'peripheral')
 
 
