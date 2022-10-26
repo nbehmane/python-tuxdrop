@@ -24,13 +24,15 @@ def obex_start():
     global bus
     global session_bus
 
+    print("Beginning OBEX session")
+
     mainloop = GLib.MainLoop()
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SystemBus()
     session_bus = dbus.SessionBus()
 
     try:
-        device_path = get_connected_devices(bus)
+        device_path = scan.get_connected_devices(bus)
         props = dbus.Interface(bus.get_object("org.bluez", device_path), "org.freedesktop.DBus.Properties")
         connected = bluetooth_utils.dbus_to_python(props.Get("org.bluez.Device1", "Connected"))
         if not connected:
