@@ -9,6 +9,7 @@ import dbus.exceptions
 import dbus.service
 import dbus.mainloop.glib
 import agent
+import scan
 import obex
 from gi.repository import GLib
 
@@ -177,7 +178,7 @@ adv = Advertisement(bus, 0, 'peripheral')
 def ctrlc_handler(signum, frame):
     global bus
     try:
-        device_path = obex.get_connected_devices(bus)
+        device_path = scan.get_connected_devices(bus)
         if device_path is None:
             advertise_stop()
             mainloop.quit()

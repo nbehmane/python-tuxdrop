@@ -20,6 +20,26 @@ managed_objects_found = 0
 devices = {}
 
 
+def get_connected_devices(process_bus):
+    object_manager = dbus.Interface(
+        process_bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, "/"),
+        bluetooth_constants.DBUS_OM_IFACE
+    )
+    managed_objects = object_manager.GetManagedObjects()
+    for path, ifaces in managed_objects.items():
+        for iface_name in ifaces:
+            if iface_name == bluetooth_constants.DEVICE_INTERFACE:
+                device_properties = ifaces[bluetooth_constants.DEVICE_INTERFACE]
+                if 'Connected' in device_properties:
+                    is_connected = bluetooth_utils.dbus_to_python(device_properties['Connected'])
+                    if is_connected:
+                        try:
+                            return path
+                        except Exception as e:
+                            print(e)
+    return None
+
+
 def scan_get_known_devices(bus):
     global managed_objects_found
     object_manager = dbus.Interface(
@@ -124,6 +144,7 @@ def scan_timeout_signal():
     bus.remove_signal_receiver(scan_interfaces_removed_signal, "InterfacesRemoved")
     bus.remove_signal_receiver(scan_properties_changed_signal, "PropertiesChanged")
     return True
+
 
 def scan_devices(bus, timeout):
     global adapter_interface

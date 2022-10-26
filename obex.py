@@ -12,30 +12,11 @@ sys.path.insert(0, './bluetooth')
 
 import bluetooth_utils
 import bluetooth_constants
+import scan
 
 mainloop = None
 bus = None
 session_bus = None
-
-
-def get_connected_devices(process_bus):
-    object_manager = dbus.Interface(
-        process_bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, "/"),
-        bluetooth_constants.DBUS_OM_IFACE
-    )
-    managed_objects = object_manager.GetManagedObjects()
-    for path, ifaces in managed_objects.items():
-        for iface_name in ifaces:
-            if iface_name == bluetooth_constants.DEVICE_INTERFACE:
-                device_properties = ifaces[bluetooth_constants.DEVICE_INTERFACE]
-                if 'Connected' in device_properties:
-                    is_connected = bluetooth_utils.dbus_to_python(device_properties['Connected'])
-                    if is_connected:
-                        try:
-                            return path
-                        except Exception as e:
-                            print(e)
-    return None
 
 
 def obex_start():
@@ -67,7 +48,7 @@ def ctrlc_handler(signum, frame):
     global bus
 
     try:
-        device_path = get_connected_devices(bus)
+        device_path = scan.get_connected_devices(bus)
         if device_path is not None:
             device = dbus.Interface(bus.get_object("org.bluez", device_path), "org.bluez.Device1")
             print(f"Disconnecting from {device_path}")
