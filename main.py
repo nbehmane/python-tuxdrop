@@ -5,6 +5,8 @@ import dbus.service
 import dbus.mainloop.glib
 from gi.repository import GLib
 import bluetooth
+import obex
+
 sys.path.insert(0, './bluetooth')
 
 import bluetooth_utils
@@ -63,6 +65,7 @@ def main():
         pair.pair()
     if (args.advertise == True):
         advertise.advertise_start();
+        obex.obex_start()
         #session_bus = dbus.SessionBus()
         #client = dbus.Interface(session_bus.get_object("org.bluez.obex", "/org/bluez/obex", ), 'org.bluez.obex.Client1')
         #print("Creating session...")

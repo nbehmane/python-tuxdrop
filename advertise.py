@@ -3,11 +3,13 @@ import signal
 sys.path.insert(0, './bluetooth')
 import bluetooth_constants
 import bluetooth_exceptions
+import bluetooth_utils
 import dbus
 import dbus.exceptions
 import dbus.service
 import dbus.mainloop.glib
 import agent
+import obex
 from gi.repository import GLib
 
 mainloop = GLib.MainLoop()
@@ -74,7 +76,8 @@ class Advertisement(dbus.service.Object):
 
 
 def advertise_register_cb():
-    print("Advertisement registered.")
+    # print("Advertisement registered.")
+    pass
 
 
 def advertise_register_error_cb(error):
@@ -85,6 +88,7 @@ def advertise_register_error_cb(error):
 def advertise_start():
     global adv
     global adv_mgr_interface
+    print("Searching...")
     bus.add_signal_receiver(advertise_properties_changed_signal,
                             dbus_interface=bluetooth_constants.DBUS_PROPERTIES,
                             signal_name="PropertiesChanged",
@@ -94,14 +98,14 @@ def advertise_start():
                             dbus_interface=bluetooth_constants.DBUS_OM_IFACE,
                             signal_name="InterfacesAdded")
 
-    print(f"Registering advertisement {adv.get_path()}")
+    # print(f"Registering advertisement {adv.get_path()}")
     adv_mgr_interface.RegisterAdvertisement(adv.get_path(),
                                             {},
                                             reply_handler=advertise_register_cb,
                                             error_handler=advertise_register_error_cb)
 
-    print(f"Advertisement {adv.local_name} activated.")
-    print(f"Registering Agent")
+    # print(f"Advertisement {adv.local_name} activated.")
+    # print(f"Registering Agent")
     agent.agent_register(bus, mainloop, path="/pybex/agent")
     signal.signal(signal.SIGINT, ctrlc_handler)
     mainloop.run()
@@ -112,20 +116,21 @@ def advertise_set_connected_status(path, status):
     global dev_path
     global dev_obj
     if status == 1:
-        print("-" * 40)
         print(f'{path} Connected')
-        print("-" * 40)
+        advertise_stop()
+        dev_path = path
         connected = 1
         props = dbus.Interface(bus.get_object("org.bluez", path), "org.freedesktop.DBus.Properties")
-        status = props.Get("org.bluez.Device1", "Trusted")
-        advertise_stop()
-        if status == 0:
+        paired = bluetooth_utils.dbus_to_python(props.Get("org.bluez.Device1", "Paired"))
+        if not paired:
+            print(f"{path} not paired")
             return
         mainloop.quit()
     else:
         print("Disconnected")
         connected = 0
         mainloop.quit()
+        exit()
 
 
 def advertise_set_paired_status(path, paired):
@@ -161,7 +166,7 @@ def advertise_stop():
     global adv_mgr_interface
     try:
         adv_mgr_interface.UnregisterAdvertisement(adv.get_path())
-        print("Unregistering advertisement ", adv.get_path())
+        print("Search stopped")
     except Exception:
         return
 
@@ -170,7 +175,17 @@ adv = Advertisement(bus, 0, 'peripheral')
 
 
 def ctrlc_handler(signum, frame):
-    print("Quitting")
+    global bus
+    try:
+        device_path = obex.get_connected_devices(bus)
+        if device_path is None:
+            advertise_stop()
+            mainloop.quit()
+            exit()
+        device = dbus.Interface(bus.get_object("org.bluez", device_path), "org.bluez.Device1")
+        device.Disconnect()
+    except Exception as e:
+        print(e)
     advertise_stop()
     mainloop.quit()
 

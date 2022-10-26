@@ -109,5 +109,6 @@ def agent_register(process_bus, process_mainloop, capability="KeyboardDisplay", 
     obj = bus.get_object(BUS_NAME, "/org/bluez")
     manager = dbus.Interface(obj, "org.bluez.AgentManager1")
     manager.RegisterAgent(path, capability)
-    print("Agent registered")
+    # print("Agent registered")
+
     return agent
