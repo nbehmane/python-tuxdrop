@@ -37,7 +37,7 @@ def obex_start():
         connected = bluetooth_utils.dbus_to_python(props.Get("org.bluez.Device1", "Connected"))
         if not connected:
             print("No device is connected. Please run again.")
-            exit()
+            exit(0)
     except Exception as e:
         print(e)
 

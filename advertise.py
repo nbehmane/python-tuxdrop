@@ -38,7 +38,7 @@ class Advertisement(dbus.service.Object):
         self.service_data = None
         self.local_name = 'PyBex'
         self.include_tx_power = True
-        self.include_tx_power = True
+        self.include_rx_power = True
         self.data = None
         self.discoverable = True
         dbus.service.Object.__init__(self, bus, self.path)
@@ -124,14 +124,14 @@ def advertise_set_connected_status(path, status):
         props = dbus.Interface(bus.get_object("org.bluez", path), "org.freedesktop.DBus.Properties")
         paired = bluetooth_utils.dbus_to_python(props.Get("org.bluez.Device1", "Paired"))
         if not paired:
-            print(f"{path} not paired")
+            print(f"{path} starting pair procedure.")
             return
         mainloop.quit()
     else:
         print("Disconnected")
         connected = 0
         mainloop.quit()
-        exit()
+        exit(0)
 
 
 def advertise_set_paired_status(path, paired):
