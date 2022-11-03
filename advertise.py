@@ -131,7 +131,7 @@ def advertise_set_connected_status(path, status):
         print("Disconnected")
         connected = 0
         mainloop.quit()
-        exit(0)
+        #exit(0)
 
 
 def advertise_set_paired_status(path, paired):
