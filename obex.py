@@ -21,6 +21,32 @@ mainloop = None
 bus = None
 session_bus = None
 
+def ask(prompt):
+    return input(prompt)
+
+
+class Agent(dbus.service.Object):
+    def __init__(self, conn=None, obj_path=None):
+        dbus.service.Object.__init__(self, conn, obj_path)
+        self.pending_auth = False
+
+    @dbus.service.method("org.bluez.obex.Transfer1", in_signature="o", out_signature="s")
+    def AuthorizePush(self, path):
+        transfer = dbus.Interface(session_bus.get_object('org.bluez.obex', path),
+                                  "org.freedesktop.DBus.Properties")
+        properties = transfer.GetAll('org.bluez.obex.Transfer1')
+        self.pending_auth = True
+        auth = ask(f"Authorize ({path}, {properties['Name']}) (Y/n): ")
+        if auth == "n" or auth == "N":
+            self.pending_auth = False
+            raise dbus.DBusException("org.bluez.obex.Error.Rejected", "Not Authorized")
+        self.pending_auth = False
+        return properties["Name"]
+
+    @dbus.service.method("org.bluez.obex.Agent1", in_signature='', out_signature='')
+    def Cancel(self):
+        print("Authorization canceled")
+        self.pending_auth = False
 
 class Application(dbus.service.Object):
     """
@@ -95,8 +121,6 @@ class TemperatureCharacteristic(bluetooth_gatt.Characteristic):
         if self.notifying:
             self.notify_temperature()
 
-        GLib.timeout_add(1000, self.simulate_temperature)
-
     def ReadValue(self, options):
         print('ReadValue in TemperatureCharacteristic called')
         print('Returning '+str(self.temperature))
@@ -133,6 +157,7 @@ def register_app_error_cb(error):
     mainloop.quit()
 
 
+
 def obex_start():
     global mainloop
     global bus
@@ -156,6 +181,7 @@ def obex_start():
         print(e)
     """
 
+    props = None
     try:
         device_path = scan.get_connected_devices(bus)
         props = dbus.Interface(bus.get_object("org.bluez", device_path), "org.freedesktop.DBus.Properties")
@@ -166,12 +192,29 @@ def obex_start():
     except Exception as e:
         print(e)
 
+    """
     app = Application(bus)
     print("Registering GATT application")
     service_manager = dbus.Interface(bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, "/org/bluez/hci0"),
                                      bluetooth_constants.GATT_MANAGER_INTERFACE)
     service_manager.RegisterApplication(app.get_path(), {}, reply_handler=register_app_cb,
                                         error_handler=register_app_error_cb)
+    """
+    obex_proxy_object = session_bus.get_object("org.bluez.obex", "/org/bluez/obex")
+    client = dbus.Interface(obex_proxy_object, "org.bluez.obex.Client1")
+    target_address = bluetooth_utils.dbus_to_python(props.Get("org.bluez.Device1", "Address"))
+    print("Registering Agent")
+    manager = dbus.Interface(session_bus.get_object("org.bluez.obex", "/org/bluez/obex"), "org.bluez.obex.AgentManager1")
+    agent_path = "/test/agent"
+    agent = Agent(session_bus, agent_path)
+    manager.RegisterAgent(agent_path)
+
+    if target_address is None:
+        ctrlc_handler(0, 0)
+    session_path = client.CreateSession(target_address, {"Target": "ftp", "Source": "38:BA:F8:55:8C:90"})
+    obj = session_bus.get_object("org.bluez.obex", session_path)
+    ftp = dbus.Interface(obj, "org.bluez.obex.Transfer1")
+
 
     signal.signal(signal.SIGINT, ctrlc_handler)
     mainloop.run()
