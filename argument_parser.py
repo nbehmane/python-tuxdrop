@@ -43,6 +43,22 @@ def parse_arguments():
                         action='store_true'
                         )
 
+    parser.add_argument('-P',
+                        '--put',
+                        help='Put a file to the remote device.',
+                        type=str,
+                        metavar='FILENAME',
+                        nargs='?'
+                        )
+
+    parser.add_argument('-G',
+                        '--get',
+                        help='Get a file from the remote device.',
+                        type=str,
+                        metavar='FILENAME',
+                        nargs='?'
+                        )
+
     args_parsed = parser.parse_args()
     return args_parsed
 

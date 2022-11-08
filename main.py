@@ -55,7 +55,10 @@ def main():
         pair.pair()
     if (args.advertise == True):
         advertise.advertise_start();
-        obex.obex_start()
+        if (args.put != None):
+            obex.obex_start(args.put, 'Put')
+        elif (args.get != None):
+            obex.obex_start(args.get, 'Get')
 
 
         #session_bus = dbus.SessionBus()

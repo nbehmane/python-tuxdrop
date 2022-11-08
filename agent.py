@@ -104,7 +104,7 @@ def agent_register(process_bus, process_mainloop, capability="KeyboardDisplay", 
     mainloop = process_mainloop
     path = "/pybex/agent"
     agent = Agent(bus, path)
-    capability = "KeyboardDisplay"
+    capability = "NoInputNoOutput"
 
     obj = bus.get_object(BUS_NAME, "/org/bluez")
     manager = dbus.Interface(obj, "org.bluez.AgentManager1")

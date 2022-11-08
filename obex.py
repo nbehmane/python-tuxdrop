@@ -108,7 +108,7 @@ def interfaces_removed():
 def error_cb(error):
     print(error)
 
-def obex_start():
+def obex_start(filename, cmd="Get"):
     global mainloop
     global bus
     global session_bus
@@ -147,6 +147,7 @@ def obex_start():
     session_path = client.CreateSession(target_address, {"Target": "ftp", "Source": "38:BA:F8:55:8C:90"})
     print(session_path)
     obj = session_bus.get_object("org.bluez.obex", session_path)
+    print(bluetooth_utils.dbus_to_python(obj))
 
     session_bus.add_signal_receiver(interfaces_added,
                             dbus_interface=bluetooth_constants.DBUS_OM_IFACE,
@@ -154,10 +155,13 @@ def obex_start():
 
     #ftp = dbus.Interface(obj, "org.bluez.obex.Transfer1")
     session = dbus.Interface(session_bus.get_object("org.bluez.obex", session_path), "org.bluez.obex.FileTransfer1")
-    print(bluetooth_utils.dbus_to_python(session.ListFolder()))
-    session.PutFile("/home/nimab/.cache/obexd/file", "file")
-    session.GetFile("file", "/home/nimab/.cache/obexd/file")
-    print(device_address)
+    if cmd == "Get":
+        print(f"Grabbing {filename}.")
+        session.GetFile(filename, f"/home/nimab/.cache/obexd/{filename}")
+    elif cmd == "Put":
+        print(f"Sending {filename} over.")
+        session.PutFile("/home/nimab/.cache/obexd/" + filename, filename)
+
     signal.signal(signal.SIGINT, ctrlc_handler)
     mainloop.run()
 
