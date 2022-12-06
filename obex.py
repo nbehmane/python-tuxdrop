@@ -22,10 +22,9 @@ mainloop = None
 bus = None
 session_bus = None
 
+
 def ask(prompt):
     return input(prompt)
-
-
 
 """
 class Transfer(dbus.service.Object):
@@ -75,7 +74,6 @@ class FileTransfer(dbus.service.Object):
 """
 
 
-
 class Agent(dbus.service.Object):
     def __init__(self, conn=None, obj_path=None):
         dbus.service.Object.__init__(self, conn, obj_path)
@@ -100,13 +98,22 @@ class Agent(dbus.service.Object):
         self.pending_auth = False
 
 
+def properties_changed_signal(interface, changed, invalidated=None, path=None):
+    print("Properties CHanged")
+    pass
+
+
 def interfaces_added(path, interfaces):
     print(f"{path} {interfaces}")
+
+
 def interfaces_removed():
     print("REMOVED")
 
+
 def error_cb(error):
     print(error)
+
 
 def obex_start(filename, cmd="Get"):
     global mainloop
@@ -137,30 +144,40 @@ def obex_start(filename, cmd="Get"):
     client = dbus.Interface(obex_proxy_object, "org.bluez.obex.Client1")
     target_address = bluetooth_utils.dbus_to_python(props.Get("org.bluez.Device1", "Address"))
     print("Registering Agent")
-    manager = dbus.Interface(session_bus.get_object("org.bluez.obex", "/org/bluez/obex"), "org.bluez.obex.AgentManager1")
+    manager = dbus.Interface(session_bus.get_object("org.bluez.obex", "/org/bluez/obex"),
+                             "org.bluez.obex.AgentManager1")
     agent_path = "/test/agent"
     agent = Agent(session_bus, agent_path)
-    manager.RegisterAgent(agent_path)
+    try:
+        manager.RegisterAgent(agent_path)
+    except Exception as e:
+        print(f"{e}")
 
     if target_address is None:
         ctrlc_handler(0, 0)
+    # Target address cannot be static. this will need to change
     session_path = client.CreateSession(target_address, {"Target": "ftp", "Source": "38:BA:F8:55:8C:90"})
     print(session_path)
     obj = session_bus.get_object("org.bluez.obex", session_path)
     print(bluetooth_utils.dbus_to_python(obj))
 
     session_bus.add_signal_receiver(interfaces_added,
-                            dbus_interface=bluetooth_constants.DBUS_OM_IFACE,
-                            signal_name="InterfacesAdded")
+                                    dbus_interface=bluetooth_constants.DBUS_OM_IFACE,
+                                    signal_name="InterfacesAdded")
 
-    #ftp = dbus.Interface(obj, "org.bluez.obex.Transfer1")
+    # NEW CODE
+    session_bus.add_signal_receiver(properties_changed_signal,
+                                    dbus_interface=bluetooth_constants.DBUS_OM_IFACE,
+                                    signal_name="PropertiesChanged")
+
+    # ftp = dbus.Interface(obj, "org.bluez.obex.Transfer1")
     session = dbus.Interface(session_bus.get_object("org.bluez.obex", session_path), "org.bluez.obex.FileTransfer1")
     if cmd == "Get":
         print(f"Grabbing {filename}.")
         session.GetFile(filename, f"/home/nimab/.cache/obexd/{filename}")
     elif cmd == "Put":
         print(f"Sending {filename} over.")
-        session.PutFile("/home/nimab/.cache/obexd/" + filename, filename)
+        session.PutFile(f"/home/nimab/.cache/obexd/{filename}", filename)
 
     signal.signal(signal.SIGINT, ctrlc_handler)
     mainloop.run()
